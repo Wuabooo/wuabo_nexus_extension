@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "WUABO Nexus Bridge",
+  "version": "1.0.0",
+  "description": "Send GTA V assets from your browser directly to Blender.",
+  "permissions": [
+    "notifications",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://forge.plebmasters.de/*",
+    "http://localhost:5556/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://forge.plebmasters.de/*"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            width: 250px;
+            padding: 15px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        h2 {
+            color: #d4af37;
+            margin-top: 0;
+            font-size: 18px;
+            text-align: center;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 6px;
+        }
+        .dot {
+            height: 10px;
+            width: 10px;
+            background-color: #bbb;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot.online { background-color: #00c851; }
+        .dot.offline { background-color: #ff4b2b; }
+        .queue {
+            font-size: 12px;
+            color: #aaa;
+        }
+        button {
+            width: 100%;
+            padding: 8px;
+            background: #d4af37;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h2>WUABO NEXUS</h2>
+    <div class="status">
+        <span id="status-dot" class="dot"></span>
+        <span id="status-text">Checking Blender...</span>
+    </div>
+    <div class="queue">
+        <p>Send assets from supported sites directly to your Blender workspace.</p>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
