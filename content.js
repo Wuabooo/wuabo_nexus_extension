@@ -91,27 +91,93 @@ async function processQueue(assetNames) {
     }
 
     isQueueRunning = true;
-    let successCount = 0;
-    let errorCount = 0;
+    const total = assetNames.length;
 
-    for (let i = 0; i < assetNames.length; i++) {
-        const name = assetNames[i];
-        updateOverlay(`[WUABO NEXUS QUEUE]\n\nImporting to Blender: ${i + 1} of ${assetNames.length}\nCurrent: ${name}`);
-
-        const response = await sendToBlenderAsync(name);
-        if (response && response.status === 'success') {
-            successCount++;
-        } else {
-            errorCount++;
-        }
-
-        // Wait for Blender to finish importing (download + textures + Sollumz import)
-        await new Promise(r => setTimeout(r, 5000));
+    // 1. Reset server counters and cache for this batch
+    try {
+        await new Promise(resolve => {
+            chrome.runtime.sendMessage({ action: 'reset_queue' }, resolve);
+        });
+    } catch (e) {
+        console.warn('[WUABO] Could not reset server counters:', e);
     }
 
+    updateOverlay(`[WUABO NEXUS]\n\nSending ${total} assets to Blender...`);
+
+    // 2. Fire ALL requests rapidly (50ms stagger every 20 requests)
+    let sendErrors = 0;
+    for (let i = 0; i < total; i++) {
+        const name = assetNames[i];
+        try {
+            const response = await sendToBlenderAsync(name);
+            if (!response || response.status !== 'success') sendErrors++;
+        } catch (e) {
+            sendErrors++;
+        }
+        // Tiny stagger - just enough to not overload the HTTP server
+        if (i % 20 === 19) await new Promise(r => setTimeout(r, 50));
+    }
+
+    updateOverlay(`[WUABO NEXUS]\n\nAll ${total} assets queued!\nDownloading & importing...`);
+    console.log(`[WUABO Queue] All ${total} assets sent (${sendErrors} send errors)`);
+
+    // 3. Poll /status every 2 seconds for real-time progress
+    const getStatus = () => {
+        return new Promise(resolve => {
+            chrome.runtime.sendMessage({ action: 'get_status' }, (response) => {
+                resolve(response && response.status === 'success' ? response.data : null);
+            });
+        });
+    };
+
+    const pollStatus = () => {
+        return new Promise((resolve) => {
+            const interval = setInterval(async () => {
+                try {
+                    const data = await getStatus();
+                    if (!data) return;
+
+                    const dl = data.total_downloaded || 0;
+                    const imp = data.total_imported || 0;
+                    const skipped = data.total_skipped || 0;
+                    const current = data.current_asset || '...';
+                    const dlPending = data.download_pending || 0;
+                    const impPending = data.import_pending || 0;
+
+                    let overlayText = `[WUABO NEXUS QUEUE]\n\n` +
+                        `📥 Downloaded: ${dl}/${total}\n` +
+                        `🔧 Imported: ${imp}/${total}\n`;
+                    
+                    if (skipped > 0) {
+                        overlayText += `⏭️ Skipped (existing): ${skipped}\n`;
+                    }
+                    
+                    overlayText += `⏳ Pending: ${dlPending} downloads, ${impPending} imports\n\n` +
+                        `Current: ${current}`;
+
+                    updateOverlay(overlayText);
+
+                    // Done when all are imported/skipped and queues are empty
+                    if (data.is_done || ((imp + skipped) >= total && dlPending === 0 && impPending === 0)) {
+                        clearInterval(interval);
+                        resolve(data);
+                    }
+                } catch (e) {
+                    // Server might be busy, just wait
+                }
+            }, 2000);
+        });
+    };
+
+    const finalStatus = await pollStatus();
+
     isQueueRunning = false;
-    updateOverlay(`Queue Finished!\nSuccess: ${successCount} | Errors: ${errorCount}`);
-    setTimeout(hideOverlay, 5000);
+    const imported = finalStatus ? finalStatus.total_imported : '?';
+    const skipped = finalStatus ? (finalStatus.total_skipped || 0) : 0;
+    let doneText = `Queue Finished!\n\n✅ Imported: ${imported}/${total}`;
+    if (skipped > 0) doneText += `\n⏭️ Skipped: ${skipped} (already in file)`;
+    updateOverlay(doneText);
+    setTimeout(hideOverlay, 8000);
 }
 
 async function scrapeCategoryPages() {
