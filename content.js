@@ -191,12 +191,18 @@ async function scrapeCategoryPages() {
     while (true) {
         updateOverlay(`Scraping Page ${pageCount}...\nFound so far: ${allNames.size}`);
 
-        // Wait for cards to be present
-        await new Promise(r => setTimeout(r, 2000));
+        // Wait for cards to be present (with retries)
+        let cards = [];
+        let cardRetries = 3;
+        while (cardRetries > 0) {
+            cards = document.querySelectorAll('.v-card-title');
+            if (cards.length > 0) break;
+            await new Promise(r => setTimeout(r, 1500));
+            cardRetries--;
+        }
 
         // Grab current visible card names
         const beforeSize = allNames.size;
-        const cards = document.querySelectorAll('.v-card-title');
         cards.forEach(card => {
             const name = card.innerText.trim();
             if (name) allNames.add(name);
@@ -205,40 +211,57 @@ async function scrapeCategoryPages() {
         console.log(`[WUABO Scraper] Page ${pageCount}: found ${cards.length} cards, total unique: ${allNames.size}`);
 
         // Find the "Next" pagination button by scanning ALL buttons on the page
+        // Add a retry mechanism in case the DOM is still updating or loading
         let nextBtn = null;
-        const allButtons = document.querySelectorAll('button, a.v-pagination__next, li.v-pagination__next button');
+        let btnRetries = 3;
 
-        for (const btn of allButtons) {
-            const text = btn.textContent.trim().toLowerCase();
-            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-            const classList = btn.className.toLowerCase();
+        while (btnRetries > 0 && !nextBtn) {
+            const allButtons = document.querySelectorAll('button, a.v-pagination__next, li.v-pagination__next button');
 
-            // Match by text content, aria-label, or CSS class
-            if (text === 'next' || text === '›' || text === '»' || text === '>' ||
-                ariaLabel.includes('next') ||
-                classList.includes('pagination__next') ||
-                classList.includes('v-pagination__next')) {
+            for (const btn of allButtons) {
+                const text = btn.textContent.trim().toLowerCase();
+                const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                const classList = btn.className.toLowerCase();
 
-                // Check if it's actually disabled
-                const isDisabled = btn.disabled ||
-                    btn.classList.contains('v-btn--disabled') ||
-                    btn.classList.contains('disabled') ||
-                    btn.getAttribute('aria-disabled') === 'true' ||
-                    btn.closest('[disabled]') !== null;
+                // Match by text content, aria-label, or CSS class
+                if (text === 'next' || text === '›' || text === '»' || text === '>' ||
+                    ariaLabel.includes('next') ||
+                    classList.includes('pagination__next') ||
+                    classList.includes('v-pagination__next')) {
 
-                if (!isDisabled) {
-                    nextBtn = btn;
+                    // Check if it's actually disabled
+                    const isDisabled = btn.disabled ||
+                        btn.classList.contains('v-btn--disabled') ||
+                        btn.classList.contains('disabled') ||
+                        btn.getAttribute('aria-disabled') === 'true' ||
+                        btn.closest('[disabled]') !== null;
+
+                    if (!isDisabled) {
+                        nextBtn = btn;
+                    }
+                    break; // Found the button element (whether disabled or not), stop looking at other buttons
                 }
-                break;
+            }
+
+            if (!nextBtn) {
+                console.log(`[WUABO Scraper] Next button not ready. Retrying in 2s... (${btnRetries} left)`);
+                await new Promise(r => setTimeout(r, 2000));
+                btnRetries--;
             }
         }
 
         if (nextBtn) {
             console.log(`[WUABO Scraper] Clicking Next button...`);
+            
+            // Scroll to button to ensure it is in view and clickable
+            try { nextBtn.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+            await new Promise(r => setTimeout(r, 500));
+            
             nextBtn.click();
             pageCount++;
-            // Wait 3 seconds for the SPA to load new content
-            await new Promise(r => setTimeout(r, 3000));
+            
+            // Wait 4 seconds for the SPA to load new content (increased from 3s for safety)
+            await new Promise(r => setTimeout(r, 4000));
         } else {
             console.log(`[WUABO Scraper] No Next button found or it's disabled. Scraping done.`);
             break;
